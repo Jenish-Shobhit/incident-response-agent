@@ -10,6 +10,21 @@ permissions:
   contents: read
 
 jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Run ruff
+        run: pipx run ruff check .
+
   test:
     name: Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
@@ -27,17 +42,24 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
+          cache-dependency-path: pyproject.toml
 
-      - name: Install dependencies
-        run: python -m pip install --requirement requirements-dev.txt
-
-      - name: Compile application modules
-        run: python -m compileall -q app tools
+      - name: Install package
+        run: python -m pip install -e ".[dev]"
 
       - name: Run tests
-        env:
-          MOCK: "1"
         run: python -m pytest
+
+      - name: The recorded demo matches the code
+        run: |
+          python scripts/record_demo.py
+          python - <<'PY'
+          import json, subprocess
+          old = json.loads(subprocess.check_output(["git", "show", "HEAD:web/demo/frames.json"]))
+          new = json.load(open("web/demo/frames.json"))
+          key = lambda f: json.dumps(f, sort_keys=True)
+          assert sorted(map(key, old)) == sorted(map(key, new)), "web/demo/frames.json is stale -- run make demo"
+          PY
 
   docker:
     name: Build container
@@ -49,12 +71,18 @@ jobs:
       - name: Build image
         run: docker build --tag incident-response-agent:ci .
 
+      - name: Smoke test
+        run: |
+          docker run -d --name app -p 8000:8000 incident-response-agent:ci
+          for i in $(seq 1 20); do curl -fsS http://127.0.0.1:8000/health && exit 0; sleep 1; done
+          docker logs app; exit 1
+
   # Publishes only web/ (the recorded replay). No server, model, or credentials
   # reach AWS. Skipped until the repository variable AWS_DEPLOY_ROLE_ARN exists,
   # so forks and fresh clones stay green without an AWS account.
   deploy-demo:
     name: Deploy static demo
-    needs: [test, docker]
+    needs: [lint, test, docker]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.AWS_DEPLOY_ROLE_ARN != ''
     runs-on: ubuntu-latest
     concurrency: deploy-demo
