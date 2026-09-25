@@ -45,6 +45,8 @@ PROVIDER = os.environ.get("LLM_PROVIDER", "anthropic").strip().lower()
 
 # ── Anthropic ────────────────────────────────────────────────────────────────
 ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-opus-5")
+# On a policy decline, let the API retry the same request on another model in one call.
+ANTHROPIC_REFUSAL_FALLBACK = _flag("ANTHROPIC_REFUSAL_FALLBACK", "1")
 
 # ── Amazon Bedrock ───────────────────────────────────────────────────────────
 AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")

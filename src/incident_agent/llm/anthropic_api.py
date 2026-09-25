@@ -1,4 +1,19 @@
-"""The Claude API backend. Reads ANTHROPIC_API_KEY through the SDK's own resolution."""
+"""The Claude API backend. Reads ANTHROPIC_API_KEY through the SDK's own resolution.
+
+Two things here matter for correctness, not just cost:
+
+**Thinking blocks go back unchanged.** Current Claude models think before they act, and
+when a turn that thought also calls a tool, the next request must carry those
+``thinking`` blocks in the assistant turn exactly as they came back. They are returned
+separately as ``thinking`` so the tool loop can replay them; every other backend returns
+an empty list and nothing changes.
+
+**A refusal is an answer, not an empty reply.** ``stop_reason == "refusal"`` means the
+model declined; reading ``content`` as if it had answered would hand the planner an
+empty JSON object and a confusing failure three nodes later. It raises here instead.
+Server-side refusal fallbacks are requested by default (``ANTHROPIC_REFUSAL_FALLBACK``),
+so a decline is retried on another model inside the same call before it gets that far.
+"""
 
 from incident_agent import config
 
@@ -37,7 +52,19 @@ def converse(system, messages, tools, max_tokens, temperature):
             t[-1]["cache_control"] = {"type": "ephemeral"}
         kwargs["tools"] = t
 
-    r = _client.messages.create(**kwargs)
+    extra = {}
+    if config.ANTHROPIC_REFUSAL_FALLBACK:
+        extra = {
+            "extra_headers": {"anthropic-beta": "server-side-fallback-2026-07-01"},
+            "extra_body": {"fallbacks": "default"},
+        }
+
+    r = _client.messages.create(**kwargs, **extra)
+
+    if r.stop_reason == "refusal":
+        details = getattr(r, "stop_details", None)
+        category = getattr(details, "category", None) if details else None
+        raise RuntimeError(f"the model declined this request (category: {category or 'unspecified'})")
 
     text = "".join(b.text for b in r.content if b.type == "text")
     tool_uses = [
@@ -54,5 +81,5 @@ def converse(system, messages, tools, max_tokens, temperature):
             "cache_write": getattr(u, "cache_creation_input_tokens", 0) or 0,
             "cache_read": getattr(u, "cache_read_input_tokens", 0) or 0,
         },
-        "raw_content": [b.model_dump() for b in r.content],
+        "thinking": [b.model_dump() for b in r.content if b.type in ("thinking", "redacted_thinking")],
     }

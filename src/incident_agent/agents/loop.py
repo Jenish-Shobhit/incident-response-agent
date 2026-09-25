@@ -91,15 +91,17 @@ def run_agent(agent, system, user_text, records, max_rounds=3, on_event=None, ma
                 "rounds": rounds,
             }
 
-        # RULE 1 -- the assistant's own turn goes in first, exactly as it came back.
+        # RULE 1 -- the assistant's own turn goes in first, exactly as it came back:
+        # any thinking blocks unchanged, then its text, then the tool calls.
         messages.append(
             {
                 "role": "assistant",
-                "content": [
+                "content": list(reply.get("thinking", []))
+                + ([text_block(reply["text"])] if reply["text"].strip() else [])
+                + [
                     {"type": "tool_use", "id": t["id"], "name": t["name"], "input": t["input"]}
                     for t in reply["tool_uses"]
-                ]
-                + ([text_block(reply["text"])] if reply["text"].strip() else []),
+                ],
             }
         )
 
