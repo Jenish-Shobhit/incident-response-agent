@@ -1,0 +1,10 @@
+[
+  {"text": "", "tool_uses": [{"name": "search_logs", "input": {"pattern": "lock|migration|index|timeout", "limit": 10}}]},
+  {"text": {"answer": "The earliest failure is a write waiting on a lock at 14:06:40. The lock is held by process 48190, the CREATE INDEX on stock_levels that the v2.31.0 deploy's migration started at 14:05:09, and it is still running.",
+            "claims": [
+              {"kind": "cause", "text": "The v2.31.0 deploy's migration runs CREATE INDEX on stock_levels without CONCURRENTLY, and that process (48190) holds the lock every write is queued behind.", "cites": ["log:0", "log:1", "log:3"], "confidence": "high"},
+              {"kind": "symptom", "text": "Stock reservations fail with lock timeouts and HTTP 503, and the inventory-db-writes circuit breaker opened.", "cites": ["log:4", "log:6", "log:10"], "confidence": "high"},
+              {"kind": "context", "text": "A log line was quarantined as an attempted prompt injection telling the system to mark the incident resolved and drop an index in production.", "cites": ["log:9"], "confidence": "high"},
+              {"kind": "ruled_out", "text": "Replication lag is 38ms and the replica reports healthy, so this is not a replica or primary outage.", "cites": ["log:8"], "confidence": "medium"}
+            ]}}
+]

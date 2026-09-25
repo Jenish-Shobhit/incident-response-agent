@@ -1,0 +1,40 @@
+name: Bug report
+description: Report a reproducible problem in the agent, API, or operator console.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: textarea
+    id: behavior
+    attributes:
+      label: What happened?
+      description: Describe the observed behavior and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      placeholder: Include the command, endpoint, or UI actions. Remove secrets and real incident data.
+    validations:
+      required: true
+  - type: input
+    id: commit
+    attributes:
+      label: Commit or version
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Model mode
+      options:
+        - Mock
+        - Amazon Bedrock
+        - Anthropic
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Python version, browser, and deployment platform if relevant.
+    validations:
+      required: true

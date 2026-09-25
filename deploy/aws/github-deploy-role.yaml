@@ -1,0 +1,86 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Lets GitHub Actions publish the static demo (web/) to its S3 bucket and refresh
+  CloudFront, using OIDC instead of stored AWS keys. The role can only be assumed
+  by pushes to main of one repository, and can only touch one bucket and one
+  distribution.
+
+Parameters:
+  GitHubSubjectPrefix:
+    Type: String
+    Default: repo:Jenish-Shobhit@99080179/incident-response-agent@1388057872
+    Description: >-
+      The repository's OIDC subject prefix. With GitHub's immutable subjects it
+      carries the owner and repository IDs, so a renamed or recreated repository
+      with the same name cannot deploy. Read it with
+      `gh api repos/OWNER/REPO/actions/oidc/customization/sub` (sub_claim_prefix).
+  BucketName:
+    Type: String
+    Default: incident-agent-demo-jenish
+    Description: Private S3 bucket that CloudFront serves from.
+  DistributionId:
+    Type: String
+    Default: E23VNZY3PVRM7N
+    Description: CloudFront distribution in front of the bucket.
+  CreateOidcProvider:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: >-
+      An account can hold only one GitHub OIDC provider. Set to false if
+      token.actions.githubusercontent.com already exists in IAM.
+
+Conditions:
+  MakeProvider: !Equals [!Ref CreateOidcProvider, "true"]
+
+Resources:
+  GitHubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Condition: MakeProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList: [sts.amazonaws.com]
+      # AWS validates GitHub's certificate itself; these are kept for older API paths.
+      ThumbprintList:
+        - 6938fd4d98bab03faadb97b34396831e3780aea1
+        - 1c58a3a8518e8759bf075b76b750d4f2df264fcd
+
+  DeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: incident-agent-demo-deploy
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Sub arn:aws:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                # Only the main branch of this one repository; forks and PRs cannot assume it.
+                token.actions.githubusercontent.com:sub: !Sub ${GitHubSubjectPrefix}:ref:refs/heads/main
+      Policies:
+        - PolicyName: publish-static-demo
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ListForSync
+                Effect: Allow
+                Action: s3:ListBucket
+                Resource: !Sub arn:aws:s3:::${BucketName}
+              - Sid: WriteSiteFiles
+                Effect: Allow
+                Action: [s3:PutObject, s3:DeleteObject]
+                Resource: !Sub arn:aws:s3:::${BucketName}/*
+              - Sid: RefreshCdn
+                Effect: Allow
+                Action: cloudfront:CreateInvalidation
+                Resource: !Sub arn:aws:cloudfront::${AWS::AccountId}:distribution/${DistributionId}
+
+Outputs:
+  RoleArn:
+    Description: Put this in the GitHub repository variable AWS_DEPLOY_ROLE_ARN.
+    Value: !GetAtt DeployRole.Arn

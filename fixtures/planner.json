@@ -1,0 +1,13 @@
+[
+  {"text": {"assessment": "The alert reports write latency and 5xx errors on inventory-service minutes after a deploy. Two independent lines of enquiry are worth opening: what the logs say failed first, and whether the numbers point at the database or at the service itself.",
+            "leading_hypothesis": "Something in the database is blocking inventory-service writes.",
+            "questions": [
+              {"id": "r1q1", "agent": "log", "question": "What is the earliest failure in the logs and what does it say caused it?", "why": "Establishes the failure mode rather than the symptom."},
+              {"id": "r1q2", "agent": "metric", "question": "Which metrics are away from baseline, and is the service or the database the bottleneck?", "why": "Separates a database cause from a compute or code one."}
+            ],
+            "done": false}},
+  {"text": {"assessment": "A root cause is established and grounded: the deploy's migration is building an index without CONCURRENTLY and its lock blocks every write. CPU is at baseline and replicas are healthy, which rules out compute and an outage.",
+            "leading_hypothesis": "CREATE INDEX on stock_levels holds a lock that queues every write to the table.",
+            "questions": [],
+            "done": true}}
+]

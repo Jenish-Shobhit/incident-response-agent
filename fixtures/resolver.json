@@ -1,0 +1,19 @@
+[
+  {"text": "", "tool_uses": [
+      {"name": "get_runbook", "input": {"id": "RB-01"}},
+      {"name": "get_runbook", "input": {"id": "RB-02"}},
+      {"name": "get_runbook", "input": {"id": "RB-03"}}]},
+  {"text": {"decision": "escalate",
+            "summary": "The v2.31.0 migration is building an index on stock_levels without CONCURRENTLY, and its lock queues every write, so reservations time out with 503s. RB-01's mitigation steps can release the lock, but RB-01 says rebuilding the index is a human decision, so this escalates.",
+            "plan": [
+              {"id": "RB-01:1", "action": "identify the blocking session in pg_stat_activity", "risk": "read_only", "rationale": "Confirms process 48190 is the lock holder before anything is changed.", "cites": ["rb:RB-01", "log:3"]},
+              {"id": "RB-01:3", "action": "set lock_timeout on the migration role", "risk": "reversible", "rationale": "Stops a future migration from queueing writes behind it for minutes.", "cites": ["rb:RB-01", "metric:db_lock_waiters"]},
+              {"id": "RB-01:4", "action": "pause the deploy pipeline", "risk": "reversible", "rationale": "Prevents the next deploy from re-running the same migration while this is handled.", "cites": ["rb:RB-01", "log:0"]},
+              {"id": "RB-01:2", "action": "cancel the migration backend with pg_cancel_backend", "risk": "confirm", "rationale": "Releases the lock immediately, but abandons 41% of an index build, so a human confirms.", "cites": ["rb:RB-01", "log:12"]}
+            ],
+            "rejected": [
+              {"runbook": "RB-02", "because": "NOT effective when the change is a database migration that is still running - the index build is still running and rolling back application code does not release its lock."},
+              {"runbook": "RB-03", "because": "not for sessions blocked on a table lock - the 63 waiting sessions are blocked on stock_levels, and a restart would drop every in-flight transaction."}
+            ],
+            "escalate_because": "Rebuilding the index with CREATE INDEX CONCURRENTLY is a human decision"}}
+]

@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: incident-response-agent
+    runtime: docker
+    plan: free
+    region: singapore
+    healthCheckPath: /health
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: MOCK
+        value: "1"
+      - key: PYTHONUNBUFFERED
+        value: "1"

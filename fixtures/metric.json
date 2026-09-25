@@ -1,0 +1,13 @@
+[
+  {"text": "", "tool_uses": [{"name": "read_metrics", "input": {}}]},
+  {"text": "", "tool_uses": [
+      {"name": "compare_metric", "input": {"name": "inventory_write_p99"}},
+      {"name": "compare_metric", "input": {"name": "inventory_db_cpu"}},
+      {"name": "compare_metric", "input": {"name": "db_lock_waiters"}}]},
+  {"text": {"answer": "The database is the bottleneck, and it is waiting rather than working. Write p99 is 145.9x its baseline while database CPU is below baseline, so this is lock contention, not compute. 63 sessions are queued on locks against a baseline of zero.",
+            "claims": [
+              {"kind": "cause", "text": "inventory_write_p99 is 12.4s against an 85ms baseline - 145.9x worse.", "cites": ["metric:inventory_write_p99"], "confidence": "high"},
+              {"kind": "ruled_out", "text": "inventory_db_cpu is 22% against a 25% baseline, so the database is not CPU-bound and adding compute or replicas will not help.", "cites": ["metric:inventory_db_cpu"], "confidence": "high"},
+              {"kind": "symptom", "text": "63 sessions are waiting on locks against a baseline of zero, and connections are at 182 / 200.", "cites": ["metric:db_lock_waiters", "metric:db_connections"], "confidence": "high"}
+            ]}}
+]

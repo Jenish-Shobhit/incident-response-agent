@@ -1,0 +1,36 @@
+{
+  "_note": "Risk overlay on the incident's runbooks. A runbook is prose plus one automatable flag; a plan needs to know which individual step is safe to run unattended and which needs a human in front of it. Every 'action' string below is a verbatim substring of the runbook's own body text -- a test asserts that, so this file can add structure but can never invent a step the runbook does not contain.",
+
+  "RB-01": {
+    "risk": "reversible",
+    "actions": [
+      {"action": "identify the blocking session in pg_stat_activity", "risk": "safe"},
+      {"action": "cancel the migration backend with pg_cancel_backend", "risk": "destructive"},
+      {"action": "set lock_timeout on the migration role", "risk": "reversible"},
+      {"action": "pause the deploy pipeline", "risk": "reversible"}
+    ],
+    "not_when": [],
+    "human_follow_up": ["Rebuilding the index with CREATE INDEX CONCURRENTLY is a human decision"],
+    "escalate_because": "Rebuilding the index with CREATE INDEX CONCURRENTLY is a human decision"
+  },
+
+  "RB-02": {
+    "risk": "reversible",
+    "actions": [
+      {"action": "Redeploy the previous inventory-service release", "risk": "reversible"}
+    ],
+    "not_when": ["NOT effective when the change is a database migration that is still running"],
+    "human_follow_up": [],
+    "escalate_because": ""
+  },
+
+  "RB-03": {
+    "risk": "destructive",
+    "actions": [
+      {"action": "Restart PgBouncer", "risk": "destructive"}
+    ],
+    "not_when": ["not for sessions blocked on a table lock"],
+    "human_follow_up": ["Drops every in-flight transaction"],
+    "escalate_because": "Drops every in-flight transaction"
+  }
+}

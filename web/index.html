@@ -1,0 +1,2056 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Incident Response</title>
+<style>
+    :root {
+      --canvas: #070b10;
+      --surface: #0d141d;
+      --surface-raised: #111a25;
+      --surface-inset: #090f16;
+      --line: #243142;
+      --line-strong: #34445a;
+      --text: #eef4fa;
+      --muted: #9aacbf;
+      --dim: #73859a;
+      --cyan: #52c9ff;
+      --cyan-soft: #102d3d;
+      --green: #43d6a0;
+      --green-soft: #102d27;
+      --amber: #ffc164;
+      --amber-soft: #342713;
+      --red: #ff6b78;
+      --red-soft: #34171d;
+      --mono: "SFMono-Regular", "Roboto Mono", Consolas, "Liberation Mono", monospace;
+      --sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      min-width: 320px;
+      min-height: 100%;
+      margin: 0;
+      background: var(--canvas);
+      color: var(--text);
+      font-family: var(--sans);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    button {
+      color: inherit;
+    }
+
+    button:focus-visible,
+    input:focus-visible,
+    label:has(input:focus-visible) {
+      outline: 2px solid var(--cyan);
+      outline-offset: 2px;
+    }
+
+    .topbar {
+      height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 22px;
+      border-bottom: 1px solid var(--line);
+      background: #090e15;
+    }
+
+    .product-name {
+      font-family: var(--mono);
+      font-size: 14px;
+      font-weight: 750;
+      letter-spacing: .12em;
+    }
+
+    .topbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .token-meter {
+      height: 36px;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 0 11px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: var(--surface-inset);
+      font-family: var(--mono);
+    }
+
+    .token-label {
+      color: var(--dim);
+      font-size: 8px;
+      font-weight: 750;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .token-value {
+      min-width: 42px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .token-meter[data-state="running"] .token-value {
+      color: var(--cyan);
+    }
+
+    .token-meter[data-state="complete"] .token-value {
+      color: var(--green);
+    }
+
+    .upload-control {
+      height: 36px;
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      padding: 0 15px;
+      border: 1px solid #79d7ff;
+      border-radius: 4px;
+      background: var(--cyan);
+      color: #04131b;
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .08em;
+      cursor: pointer;
+      user-select: none;
+      transition: background .15s ease, transform .15s ease;
+    }
+
+    .upload-control:hover {
+      background: #8bddff;
+    }
+
+    .upload-control:active {
+      transform: translateY(1px);
+    }
+
+    .upload-control svg {
+      width: 15px;
+      height: 15px;
+      stroke-width: 2;
+    }
+
+    .upload-control input {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .workspace {
+      width: min(1600px, 100%);
+      height: calc(100vh - 60px);
+      margin: 0 auto;
+      padding: 14px 18px 18px;
+      display: grid;
+      grid-template-rows: 102px minmax(0, 1fr);
+      gap: 12px;
+    }
+
+    .panel,
+    .incident-bar {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--surface);
+    }
+
+    .incident-bar {
+      position: relative;
+      display: grid;
+      grid-template-columns: minmax(360px, 1fr) auto;
+      align-items: stretch;
+      overflow: hidden;
+    }
+
+    .incident-bar::before {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      width: 4px;
+      content: "";
+      background: var(--line-strong);
+    }
+
+    .incident-bar[data-loaded="true"]::before {
+      background: var(--red);
+    }
+
+    .incident-primary {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      padding: 15px 20px 15px 24px;
+    }
+
+    .severity {
+      width: 54px;
+      height: 54px;
+      flex: 0 0 54px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--line-strong);
+      border-radius: 5px;
+      background: var(--surface-inset);
+      color: var(--dim);
+      font-family: var(--mono);
+      font-size: 16px;
+      font-weight: 850;
+    }
+
+    .incident-bar[data-loaded="true"] .severity {
+      border-color: #7a303a;
+      background: var(--red-soft);
+      color: #ff9ba4;
+    }
+
+    .incident-copy {
+      min-width: 0;
+    }
+
+    .overline {
+      margin: 0 0 6px;
+      color: var(--dim);
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 750;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+
+    .incident-title {
+      margin: 0;
+      overflow: hidden;
+      color: var(--text);
+      font-size: 18px;
+      font-weight: 720;
+      letter-spacing: -.015em;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .incident-summary {
+      max-width: 830px;
+      margin: 5px 0 0;
+      overflow: hidden;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .incident-side {
+      display: flex;
+      align-items: center;
+      padding: 14px 16px;
+      border-left: 1px solid var(--line);
+    }
+
+    .incident-facts {
+      display: flex;
+      align-items: stretch;
+    }
+
+    .fact {
+      min-width: 82px;
+      padding: 2px 14px;
+      border-left: 1px solid var(--line);
+    }
+
+    .fact:first-child {
+      border-left: 0;
+    }
+
+    .fact-value {
+      display: block;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 15px;
+      font-weight: 750;
+    }
+
+    .fact-label {
+      display: block;
+      margin-top: 5px;
+      color: var(--dim);
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    .investigate-button {
+      min-width: 164px;
+      height: 42px;
+      margin-left: 12px;
+      border: 1px solid var(--cyan);
+      border-radius: 4px;
+      background: transparent;
+      color: var(--cyan);
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .08em;
+      cursor: pointer;
+      transition: background .15s ease, color .15s ease;
+    }
+
+    .investigate-button:hover:not(:disabled) {
+      background: var(--cyan);
+      color: #04131b;
+    }
+
+    .investigate-button:disabled {
+      border-color: var(--line-strong);
+      color: var(--dim);
+      cursor: not-allowed;
+    }
+
+    .section-head {
+      height: 43px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 0 14px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0;
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    .section-number {
+      color: var(--cyan);
+    }
+
+    .section-state {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--dim);
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .section-state::before {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+      content: "";
+    }
+
+    .section-state[data-state="running"] {
+      color: var(--cyan);
+    }
+
+    .section-state[data-state="complete"],
+    .section-state[data-state="approved"] {
+      color: var(--green);
+    }
+
+    .section-state[data-state="attention"] {
+      color: var(--amber);
+    }
+
+    .investigation-panel {
+      position: relative;
+      overflow: hidden;
+    }
+
+    .investigation-panel .section-head {
+      height: 34px;
+      padding: 0 11px;
+    }
+
+    .investigation-panel .section-title {
+      gap: 8px;
+      font-size: 9px;
+    }
+
+    .investigation-panel .section-state {
+      font-size: 8px;
+    }
+
+    .compact-agent-body {
+      height: calc(100% - 34px);
+      display: grid;
+      grid-template-columns: minmax(230px, 1fr) auto;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 11px 10px;
+      background: var(--surface-inset);
+    }
+
+    .current-agent-readout {
+      min-width: 0;
+      display: grid;
+      grid-template-columns: 9px minmax(0, 1fr);
+      gap: 8px;
+      align-items: center;
+    }
+
+    .agent-pulse {
+      width: 8px;
+      height: 8px;
+      border: 1px solid var(--line-strong);
+      border-radius: 50%;
+      background: var(--surface);
+    }
+
+    .investigation-panel:has(.section-state[data-state="running"]) .agent-pulse {
+      border-color: var(--cyan);
+      background: var(--cyan);
+      box-shadow: 0 0 0 4px rgba(82, 201, 255, .1);
+      animation: agentPulse 1.1s ease-in-out infinite;
+    }
+
+    .investigation-panel:has(.section-state[data-state="complete"]) .agent-pulse {
+      border-color: var(--green);
+      background: var(--green);
+    }
+
+    @keyframes agentPulse {
+      50% { opacity: .35; }
+    }
+
+    .current-agent-copy {
+      min-width: 0;
+    }
+
+    .current-agent-top {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .current-agent-name {
+      overflow: hidden;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: .07em;
+      text-overflow: ellipsis;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .run-clock {
+      flex: 0 0 auto;
+      color: var(--cyan);
+      font-family: var(--mono);
+      font-size: 8px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .activity-text {
+      margin: 4px 0 0;
+      overflow: hidden;
+      color: var(--muted);
+      font-size: 10px;
+      line-height: 1.35;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .agent-status-grid {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 5px 11px;
+      max-width: 330px;
+    }
+
+    .agent {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .agent-top {
+      display: contents;
+    }
+
+    .agent-dot {
+      width: 5px;
+      height: 5px;
+      flex: 0 0 5px;
+      border-radius: 50%;
+      background: var(--line-strong);
+    }
+
+    .agent[data-state="running"] .agent-dot,
+    .agent[data-state="review"] .agent-dot {
+      background: var(--cyan);
+      box-shadow: 0 0 6px rgba(82, 201, 255, .65);
+    }
+
+    .agent[data-state="complete"] .agent-dot {
+      background: var(--green);
+    }
+
+    .agent-status {
+      color: var(--dim);
+      font-family: var(--mono);
+      font-size: 7px;
+      font-weight: 750;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+    }
+
+    .agent[data-state="running"] .agent-status,
+    .agent[data-state="review"] .agent-status {
+      color: var(--cyan);
+    }
+
+    .agent[data-state="complete"] .agent-status {
+      color: var(--green);
+    }
+
+    .agent-name {
+      margin: 0;
+      overflow: hidden;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 8px;
+      font-weight: 650;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .agent-output {
+      display: none;
+    }
+
+    .run-progress {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      height: 2px;
+      overflow: hidden;
+      background: transparent;
+    }
+
+    .run-progress span {
+      display: block;
+      width: 0;
+      height: 100%;
+      background: var(--cyan);
+      transition: width .45s ease;
+    }
+
+    .lower-grid {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1.05fr) minmax(500px, 1fr);
+      gap: 12px;
+    }
+
+    .left-column {
+      min-height: 0;
+      display: grid;
+      grid-template-rows: 104px minmax(0, 1fr);
+      gap: 12px;
+    }
+
+    .brief-panel,
+    .evidence-panel,
+    .approval-panel {
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .panel-body {
+      height: calc(100% - 43px);
+      overflow: auto;
+      scrollbar-width: thin;
+      scrollbar-color: var(--line-strong) transparent;
+    }
+
+    .empty-state {
+      height: 100%;
+      min-height: 160px;
+      display: grid;
+      place-content: center;
+      justify-items: center;
+      padding: 30px;
+      text-align: center;
+    }
+
+    .empty-glyph {
+      width: 36px;
+      height: 36px;
+      display: grid;
+      place-items: center;
+      margin-bottom: 12px;
+      border: 1px solid var(--line-strong);
+      color: var(--dim);
+      font-family: var(--mono);
+      font-size: 13px;
+    }
+
+    .empty-title {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 680;
+    }
+
+    .empty-copy {
+      max-width: 340px;
+      margin: 7px 0 0;
+      color: var(--dim);
+      font-size: 11px;
+      line-height: 1.5;
+    }
+
+    [hidden] {
+      display: none !important;
+    }
+
+    .brief-content {
+      padding: 16px;
+    }
+
+    .decision-block {
+      position: relative;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 16px 18px;
+      border: 1px solid #6e5327;
+      border-left: 4px solid var(--amber);
+      border-radius: 4px;
+      background: var(--amber-soft);
+    }
+
+    .decision-label {
+      display: block;
+      margin-bottom: 8px;
+      color: #d6ac6b;
+      font-family: var(--mono);
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: .11em;
+      text-transform: uppercase;
+    }
+
+    .decision-value {
+      color: var(--amber);
+      font-size: clamp(27px, 2.6vw, 38px);
+      font-weight: 900;
+      letter-spacing: -.035em;
+      line-height: .95;
+    }
+
+    .confidence-value {
+      padding: 5px 7px;
+      border: 1px solid #6e5327;
+      color: #ead8b9;
+      font-family: var(--mono);
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: .07em;
+      white-space: nowrap;
+    }
+
+    .result-block {
+      margin-top: 12px;
+      padding: 14px 15px;
+      border: 1px solid var(--line);
+      background: var(--surface-raised);
+    }
+
+    .root-cause {
+      border-left: 3px solid var(--red);
+    }
+
+    .result-block h3 {
+      margin: 0;
+      color: var(--dim);
+      font-family: var(--mono);
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: .11em;
+      text-transform: uppercase;
+    }
+
+    .root-cause p,
+    .reason-block p {
+      margin: 8px 0 0;
+      color: var(--text);
+      font-size: 15px;
+      font-weight: 620;
+      line-height: 1.45;
+      letter-spacing: -.01em;
+    }
+
+    .reason-block p {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 450;
+      line-height: 1.55;
+    }
+
+    .citations {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-top: 10px;
+    }
+
+    .citation {
+      padding: 4px 7px;
+      border: 1px solid #315b70;
+      border-radius: 3px;
+      background: var(--cyan-soft);
+      color: #99ddff;
+      font-family: var(--mono);
+      font-size: 9px;
+      font-weight: 750;
+      cursor: pointer;
+    }
+
+    .citation:hover,
+    .citation.is-active {
+      border-color: var(--cyan);
+      color: #d9f3ff;
+    }
+
+    .injection-grid {
+      display: grid;
+      grid-template-columns: 120px minmax(0, 1fr);
+      gap: 12px;
+      align-items: stretch;
+      margin-top: 12px;
+    }
+
+    .injection-line-block,
+    .injection-note-block {
+      margin-top: 0;
+      border: 1px solid #65313a;
+      background: var(--red-soft);
+    }
+
+    .injection-line-block h3,
+    .injection-note-block h3 {
+      color: #ff9ba4;
+    }
+
+    .injection-index {
+      display: block;
+      margin-top: 12px;
+      color: #ff9ba4;
+      font-family: var(--mono);
+      font-size: 27px;
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    .injection-note {
+      margin: 7px 0 0;
+      color: #e3b9bd;
+      font-size: 11px;
+      line-height: 1.5;
+    }
+
+    .right-rail {
+      min-height: 0;
+      display: grid;
+      grid-template-rows: minmax(220px, .82fr) minmax(300px, 1.18fr);
+      gap: 12px;
+    }
+
+    .trust-summary {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 11px 13px;
+      border-bottom: 1px solid var(--line);
+      background: var(--surface-inset);
+    }
+
+    .shield {
+      width: 22px;
+      height: 25px;
+      flex: 0 0 auto;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--line-strong);
+      color: var(--dim);
+      font-family: var(--mono);
+      font-size: 9px;
+      clip-path: polygon(50% 0, 100% 18%, 90% 75%, 50% 100%, 10% 75%, 0 18%);
+    }
+
+    .trust-summary[data-threat="true"] .shield {
+      border-color: var(--red);
+      background: var(--red-soft);
+      color: #ffadb5;
+    }
+
+    .trust-copy {
+      min-width: 0;
+    }
+
+    .trust-title {
+      margin: 0;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .trust-detail {
+      margin: 3px 0 0;
+      color: var(--dim);
+      font-size: 10.5px;
+      line-height: 1.45;
+    }
+
+    .trust-raw {
+      margin: 8px 0 0;
+      padding: 7px 8px;
+      border-left: 2px solid var(--red);
+      background: #1e1015;
+      color: #f2c3c7;
+      font-family: var(--mono);
+      font-size: 9px;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+
+    .evidence-view {
+      padding: 14px 15px 16px;
+    }
+
+    .evidence-kind {
+      color: var(--cyan);
+      font-family: var(--mono);
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: .09em;
+      text-transform: uppercase;
+    }
+
+    .evidence-source {
+      margin: 5px 0 0;
+      color: var(--dim);
+      font-family: var(--mono);
+      font-size: 10px;
+      line-height: 1.4;
+    }
+
+    .evidence-raw {
+      margin: 11px 0 0;
+      color: #c8d3df;
+      font-family: var(--mono);
+      font-size: 11px;
+      line-height: 1.55;
+      overflow-wrap: anywhere;
+    }
+
+    .approval-body {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .plan-summary {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .plan-stat {
+      padding: 9px 11px;
+      border-left: 1px solid var(--line);
+    }
+
+    .plan-stat:first-child {
+      border-left: 0;
+    }
+
+    .plan-stat b {
+      display: block;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+
+    .plan-stat span {
+      display: block;
+      margin-top: 3px;
+      color: var(--dim);
+      font-family: var(--mono);
+      font-size: 8px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .action-list {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: auto;
+      scrollbar-width: thin;
+      scrollbar-color: var(--line-strong) transparent;
+    }
+
+    .action-row {
+      display: grid;
+      grid-template-columns: 18px minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: start;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .action-row input[type="checkbox"] {
+      width: 14px;
+      height: 14px;
+      margin: 1px 0 0;
+      accent-color: var(--green);
+    }
+
+    .action-main {
+      min-width: 0;
+    }
+
+    .action-name {
+      margin: 0;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.45;
+    }
+
+    .action-id {
+      display: block;
+      margin-top: 3px;
+      color: var(--dim);
+      font-family: var(--mono);
+      font-size: 8px;
+    }
+
+    .risk {
+      padding: 3px 5px;
+      border: 1px solid var(--line-strong);
+      border-radius: 2px;
+      color: var(--dim);
+      font-family: var(--mono);
+      font-size: 7px;
+      font-weight: 800;
+      letter-spacing: .07em;
+      text-transform: uppercase;
+    }
+
+    .risk.safe {
+      border-color: #245f4e;
+      background: var(--green-soft);
+      color: #83e5c2;
+    }
+
+    .risk.destructive {
+      border-color: #7a303a;
+      background: var(--red-soft);
+      color: #ff9ba4;
+    }
+
+    .confirm-row {
+      grid-column: 2 / 4;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 6px;
+      margin-top: 2px;
+    }
+
+    .confirm-input {
+      min-width: 0;
+      height: 27px;
+      padding: 0 8px;
+      border: 1px solid #66323a;
+      border-radius: 3px;
+      background: #0b1017;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 9px;
+    }
+
+    .confirm-state {
+      align-self: center;
+      color: var(--red);
+      font-family: var(--mono);
+      font-size: 8px;
+      white-space: nowrap;
+    }
+
+    .approval-footer {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto auto;
+      gap: 7px;
+      align-items: center;
+      padding: 9px 11px;
+      border-top: 1px solid var(--line);
+      background: var(--surface-inset);
+    }
+
+    .approval-note {
+      min-width: 0;
+      overflow: hidden;
+      color: var(--dim);
+      font-size: 9px;
+      line-height: 1.35;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .text-button,
+    .approve-button,
+    .download-button {
+      height: 29px;
+      padding: 0 10px;
+      border-radius: 3px;
+      font-family: var(--mono);
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+
+    .text-button {
+      border: 1px solid var(--line-strong);
+      background: transparent;
+      color: var(--muted);
+    }
+
+    .approve-button {
+      border: 1px solid var(--green);
+      background: var(--green);
+      color: #04140f;
+    }
+
+    .download-button {
+      border: 1px solid var(--cyan);
+      background: var(--cyan);
+      color: #04131b;
+    }
+
+    .text-button:disabled,
+    .approve-button:disabled,
+    .download-button:disabled {
+      border-color: var(--line-strong);
+      background: transparent;
+      color: var(--dim);
+      cursor: not-allowed;
+    }
+
+    .receipt {
+      margin: 0;
+      padding: 11px 13px;
+      border-top: 1px solid #235c4c;
+      background: var(--green-soft);
+      color: #a6edd3;
+      font-family: var(--mono);
+      font-size: 9px;
+      line-height: 1.5;
+    }
+
+    .error-banner {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      z-index: 10;
+      max-width: min(420px, calc(100vw - 36px));
+      padding: 12px 14px;
+      border: 1px solid #813641;
+      border-radius: 4px;
+      background: #281218;
+      color: #ffc4c9;
+      font-size: 12px;
+    }
+
+    @media (max-width: 1120px) {
+      body {
+        height: auto;
+        overflow: auto;
+      }
+
+      .workspace {
+        height: auto;
+        min-height: calc(100vh - 60px);
+        grid-template-rows: auto auto;
+      }
+
+      .incident-bar {
+        grid-template-columns: 1fr;
+      }
+
+      .incident-side {
+        justify-content: space-between;
+        border-top: 1px solid var(--line);
+        border-left: 0;
+      }
+
+      .lower-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .left-column {
+        grid-template-rows: 104px minmax(500px, auto);
+      }
+
+      .brief-panel {
+        min-height: 500px;
+      }
+
+      .right-rail {
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: 360px;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .topbar {
+        padding: 0 14px;
+      }
+
+      .product-name {
+        font-size: 11px;
+      }
+
+      .token-label {
+        display: none;
+      }
+
+      .token-meter {
+        padding: 0 8px;
+      }
+
+      .upload-control {
+        gap: 5px;
+        padding: 0 10px;
+        font-size: 9px;
+      }
+
+      .upload-control svg {
+        display: none;
+      }
+
+      .workspace {
+        padding: 10px;
+      }
+
+      .incident-primary {
+        align-items: flex-start;
+        padding-right: 14px;
+      }
+
+      .incident-summary {
+        white-space: normal;
+      }
+
+      .incident-side,
+      .incident-facts {
+        align-items: stretch;
+      }
+
+      .incident-side {
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .fact {
+        flex: 1 1 0;
+        min-width: 0;
+        padding: 2px 8px;
+      }
+
+      .investigate-button {
+        width: 100%;
+        margin-left: 0;
+      }
+
+      .right-rail {
+        grid-template-columns: 1fr;
+        grid-template-rows: 300px 420px;
+      }
+
+      .compact-agent-body {
+        grid-template-columns: minmax(180px, 1fr) auto;
+      }
+
+      .agent-status-grid {
+        max-width: 235px;
+      }
+
+      .decision-block {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+    }
+
+    @media (max-width: 540px) {
+      .left-column {
+        grid-template-rows: 118px minmax(500px, auto);
+      }
+
+      .compact-agent-body {
+        grid-template-columns: 1fr;
+        gap: 7px;
+      }
+
+      .agent-status-grid {
+        justify-content: flex-start;
+        max-width: none;
+      }
+
+      .agent-status {
+        display: none;
+      }
+
+      .injection-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+<header class="topbar">
+    <div class="product-name">AI INCIDENT RESPONSE</div>
+    <div class="topbar-actions">
+      <div class="token-meter" id="tokenMeter" data-state="idle" role="status" aria-live="polite">
+        <span class="token-label">Tokens consumed</span>
+        <strong class="token-value" id="tokenCount">0</strong>
+      </div>
+      <label class="upload-control" for="incidentFile">
+        <svg aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 14v4.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V14"/>
+        </svg>
+        UPLOAD INCIDENT
+        <input id="incidentFile" type="file" accept=".json,application/json">
+      </label>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <section class="incident-bar" id="incidentBar" data-loaded="false" aria-labelledby="incidentTitle">
+      <div class="incident-primary">
+        <div class="severity" id="severity">P—</div>
+        <div class="incident-copy">
+          <p class="overline" id="incidentOverline">Waiting for incident</p>
+          <h1 class="incident-title" id="incidentTitle">No incident loaded</h1>
+          <p class="incident-summary" id="incidentSummary">Upload an incident JSON to load the alert, evidence, and response path.</p>
+        </div>
+      </div>
+      <div class="incident-side">
+        <div class="incident-facts" aria-label="Incident input counts">
+          <div class="fact">
+            <span class="fact-value" id="logCount">—</span>
+            <span class="fact-label">Logs</span>
+          </div>
+          <div class="fact">
+            <span class="fact-value" id="metricCount">—</span>
+            <span class="fact-label">Metrics</span>
+          </div>
+          <div class="fact">
+            <span class="fact-value" id="runbookCount">—</span>
+            <span class="fact-label">Runbooks</span>
+          </div>
+        </div>
+        <button class="investigate-button" id="investigateButton" type="button" disabled>INVESTIGATE INCIDENT</button>
+      </div>
+    </section>
+
+    <div class="lower-grid">
+      <div class="left-column">
+        <section class="panel investigation-panel" aria-labelledby="investigationHeading">
+          <div class="section-head">
+            <h2 class="section-title" id="investigationHeading">
+              <span class="section-number">01</span>
+              Current agent status
+            </h2>
+            <span class="section-state" id="investigationState" data-state="idle">Idle</span>
+          </div>
+
+          <div class="compact-agent-body">
+            <div class="current-agent-readout" aria-live="polite">
+              <span class="agent-pulse" aria-hidden="true"></span>
+              <div class="current-agent-copy">
+                <div class="current-agent-top">
+                  <strong class="current-agent-name" id="currentAgentName">No agent running</strong>
+                  <span class="run-clock" id="runClock">00:00.0</span>
+                </div>
+                <p class="activity-text" id="activityText">Upload an incident to begin.</p>
+              </div>
+            </div>
+
+            <div class="agent-status-grid" aria-label="Current status of incident-response agents">
+              <span class="agent" id="agentGuard" data-state="idle">
+                <span class="agent-dot" aria-hidden="true"></span>
+                <span class="agent-top">
+                  <span class="agent-name">Guard</span>
+                  <span class="agent-status">Idle</span>
+                </span>
+                <span class="agent-output">Awaiting payload</span>
+              </span>
+
+              <span class="agent" id="agentTriage" data-state="idle">
+                <span class="agent-dot" aria-hidden="true"></span>
+                <span class="agent-top">
+                  <span class="agent-name">Triage</span>
+                  <span class="agent-status">Idle</span>
+                </span>
+                <span class="agent-output">Awaiting trusted alert</span>
+              </span>
+
+              <span class="agent" id="agentLogs" data-state="idle">
+                <span class="agent-dot" aria-hidden="true"></span>
+                <span class="agent-top">
+                  <span class="agent-name">Logs</span>
+                  <span class="agent-status">Idle</span>
+                </span>
+                <span class="agent-output">Available to planner</span>
+              </span>
+
+              <span class="agent" id="agentMetrics" data-state="idle">
+                <span class="agent-dot" aria-hidden="true"></span>
+                <span class="agent-top">
+                  <span class="agent-name">Metrics</span>
+                  <span class="agent-status">Idle</span>
+                </span>
+                <span class="agent-output">Available to planner</span>
+              </span>
+
+              <span class="agent" id="agentResolution" data-state="idle">
+                <span class="agent-dot" aria-hidden="true"></span>
+                <span class="agent-top">
+                  <span class="agent-name">Resolution</span>
+                  <span class="agent-status">Idle</span>
+                </span>
+                <span class="agent-output">Awaiting evidence</span>
+              </span>
+
+              <span class="agent" id="agentVerifier" data-state="idle">
+                <span class="agent-dot" aria-hidden="true"></span>
+                <span class="agent-top">
+                  <span class="agent-name">Verifier</span>
+                  <span class="agent-status">Idle</span>
+                </span>
+                <span class="agent-output">Awaiting response draft</span>
+              </span>
+            </div>
+          </div>
+          <div class="run-progress" aria-hidden="true"><span id="runProgress" style="display:block;height:100%;width:0;background:var(--cyan);transition:width .25s ease"></span></div>
+        </section>
+
+        <section class="panel brief-panel" aria-labelledby="briefHeading">
+        <div class="section-head">
+          <h2 class="section-title" id="briefHeading">
+            <span class="section-number">02</span>
+            Incident result
+          </h2>
+          <span class="section-state" id="briefState" data-state="idle">Awaiting investigation</span>
+        </div>
+        <div class="panel-body">
+          <div class="empty-state" id="briefEmpty">
+            <div class="empty-glyph">02</div>
+            <p class="empty-title">No verified result yet</p>
+            <p class="empty-copy">The decision, root cause, reasoning, and injection finding will appear here after verification.</p>
+          </div>
+
+          <div class="brief-content" id="briefContent" hidden>
+            <div class="decision-block">
+              <div>
+                <span class="decision-label">Recommended decision</span>
+                <strong class="decision-value" id="decisionValue">ESCALATE</strong>
+              </div>
+              <strong class="confidence-value" id="confidenceValue">VERIFIED · HIGH CONFIDENCE</strong>
+            </div>
+
+            <div class="result-block root-cause">
+              <h3>Verified root cause</h3>
+              <p id="rootCauseText">—</p>
+              <div class="citations" id="rootCitations"></div>
+            </div>
+
+            <div class="result-block reason-block">
+              <h3>Reason</h3>
+              <p id="reasonText">—</p>
+              <div class="citations"></div>
+            </div>
+
+            <div class="injection-grid">
+              <div class="result-block injection-line-block">
+                <h3>Quarantined log line</h3>
+                <strong class="injection-index" id="injectionLine">—</strong>
+              </div>
+              <div class="result-block injection-note-block">
+                <h3>Injection note</h3>
+                <p class="injection-note" id="injectionNote">—</p>
+                <div class="citations">
+                  <button class="citation" id="injectionCitation" type="button" hidden></button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        </section>
+      </div>
+
+      <aside class="right-rail">
+        <section class="panel evidence-panel" aria-labelledby="evidenceHeading">
+          <div class="section-head">
+            <h2 class="section-title" id="evidenceHeading">
+              <span class="section-number">03</span>
+              Audit &amp; guardrails
+            </h2>
+            <span class="section-state" id="evidenceState" data-state="idle">Unscanned</span>
+          </div>
+          <div class="panel-body">
+            <div class="trust-summary" id="trustSummary" data-threat="false">
+              <span class="shield" aria-hidden="true">✓</span>
+              <div class="trust-copy">
+                <p class="trust-title" id="trustTitle">Input has not been scanned</p>
+                <p class="trust-detail" id="trustDetail">Log content remains untrusted until the guard agent completes.</p>
+                <p class="trust-raw" id="trustRaw" hidden></p>
+              </div>
+            </div>
+            <div class="evidence-view">
+              <div class="evidence-kind" id="evidenceKind">No evidence selected</div>
+              <p class="evidence-source" id="evidenceSource">Choose a citation in the result to inspect its exact source.</p>
+              <p class="evidence-raw" id="evidenceRaw"></p>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel approval-panel" aria-labelledby="approvalHeading">
+          <div class="section-head">
+            <h2 class="section-title" id="approvalHeading">
+              <span class="section-number">04</span>
+              Remediation plan &amp; approval
+            </h2>
+            <span class="section-state" id="approvalState" data-state="idle">Locked</span>
+          </div>
+          <div class="panel-body approval-body">
+            <div class="plan-summary">
+              <div class="plan-stat">
+                <b id="safeCount">—</b>
+                <span>Safe / reversible</span>
+              </div>
+              <div class="plan-stat">
+                <b id="gatedCount">—</b>
+                <span>Confirm gate</span>
+              </div>
+              <div class="plan-stat">
+                <b id="humanCount">—</b>
+                <span>Human follow-up</span>
+              </div>
+            </div>
+            <div class="action-list" id="actionList">
+              <div class="empty-state">
+                <p class="empty-title">Awaiting a verified response plan</p>
+                <p class="empty-copy">No action can become final before this approval gate.</p>
+              </div>
+            </div>
+            <p class="receipt" id="approvalReceipt" hidden></p>
+            <div class="approval-footer">
+              <span class="approval-note" id="approvalNote">Investigation must complete before review.</span>
+              <button class="download-button" id="downloadButton" type="button" hidden disabled>Download PDF</button>
+              <button class="text-button" id="rejectButton" type="button" disabled>Reject</button>
+              <button class="approve-button" id="approveButton" type="button" disabled>Approve selected</button>
+            </div>
+          </div>
+        </section>
+      </aside>
+    </div>
+  </main>
+
+  <div class="error-banner" id="errorBanner" role="alert" hidden></div>
+<script>
+/* ─────────────────────────────────────────────────────────────────────────
+   The data layer. The markup and every class above it come from the agreed
+   design; nothing here invents a visual. This file only does four things:
+   read the SSE stream, move each panel through its states, resolve citations
+   against the evidence they name, and hold the approval gate shut.
+   ───────────────────────────────────────────────────────────────────────── */
+
+const $ = (id) => document.getElementById(id);
+const esc = (v) => (v === null || v === undefined ? "" : String(v));
+
+/* my agent names -> the six lanes the design draws */
+const LANE = {
+  guard: { el: "agentGuard", label: "Guard" },
+  planner: { el: "agentTriage", label: "Triage" },
+  log: { el: "agentLogs", label: "Logs" },
+  metric: { el: "agentMetrics", label: "Metrics" },
+  resolver: { el: "agentResolution", label: "Resolution" },
+  verifier: { el: "agentVerifier", label: "Verifier" },
+};
+
+/* every node the graph can report, so the progress bar means something */
+const NODES = ["ingest", "guard", "triage", "investigate", "collect", "match_runbooks",
+               "resolve", "verify", "render", "approve", "execute"];
+
+let incident = null;      // the normalised incident, as loaded
+let threadId = null;      // joins /run to /approve
+/* Replay mode: asked for with ?demo, or forced when boot finds no backend
+   (static hosting on S3/CloudFront). Then nothing ever calls /run or a model. */
+let demoMode = new URLSearchParams(location.search).has("demo");
+let brief = null;         // the verified result
+let planRows = [];        // what the human is being asked to approve
+let gateInputs = {};      // row id -> its confirm input
+let seenNodes = new Set();
+let clockTimer = null;
+let clockStart = 0;
+
+/* ── small helpers ───────────────────────────────────────────────────── */
+
+function setState(id, state, text) {
+  const el = $(id);
+  if (!el) return;
+  el.dataset.state = state;
+  if (text != null) el.textContent = text;
+}
+
+/* An event naming a lane this screen does not draw must not throw. collect,
+   match_runbooks and execute are real graph nodes with no lane of their own,
+   and an unguarded lookup here kills the page on frame two. */
+function setLane(name, state, status, output) {
+  const lane = LANE[name];
+  if (!lane) return;
+  const el = $(lane.el);
+  if (!el) return;
+  el.dataset.state = state;
+  const s = el.querySelector(".agent-status");
+  const o = el.querySelector(".agent-output");
+  if (s && status != null) s.textContent = status;
+  if (o && output != null) o.textContent = output;
+}
+
+function say(agent, text) {
+  const lane = LANE[agent];
+  $("currentAgentName").textContent = lane ? lane.label : (agent || "Working");
+  $("activityText").textContent = text || "";
+}
+
+function startClock() {
+  clockStart = Date.now();
+  clearInterval(clockTimer);
+  clockTimer = setInterval(() => {
+    const s = (Date.now() - clockStart) / 1000;
+    $("runClock").textContent =
+      String(Math.floor(s / 60)).padStart(2, "0") + ":" +
+      (s % 60).toFixed(1).padStart(4, "0");
+  }, 100);
+}
+
+function stopClock() { clearInterval(clockTimer); clockTimer = null; }
+
+function progress() {
+  const pct = Math.round((seenNodes.size / NODES.length) * 100);
+  const bar = $("runProgress");
+  if (bar) bar.style.width = pct + "%";
+}
+
+function fail(message) {
+  const b = $("errorBanner");
+  b.hidden = false;
+  b.textContent = message;
+}
+
+/* ── citations ───────────────────────────────────────────────────────── */
+
+/* A citation is only worth showing if clicking it produces the record it
+   names. Panel 03 is where that happens, which is why every chip is a button
+   rather than styled text. */
+function citationButton(key) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "citation";
+  b.textContent = key;
+  b.addEventListener("click", () => {
+    document.querySelectorAll(".citation.is-active")
+      .forEach((c) => c.classList.remove("is-active"));
+    b.classList.add("is-active");
+    showEvidence(key);
+  });
+  return b;
+}
+
+function fillCitations(container, keys) {
+  if (!container) return;
+  container.innerHTML = "";
+  (keys || []).forEach((k) => container.appendChild(citationButton(k)));
+}
+
+function showEvidence(key) {
+  const rec = brief && brief.citations ? brief.citations[key] : null;
+  if (!rec) {
+    $("evidenceKind").textContent = key;
+    $("evidenceSource").textContent = "This citation does not resolve to any record.";
+    $("evidenceRaw").textContent = "";
+    return;
+  }
+  $("evidenceKind").textContent = rec.kind.toUpperCase() + " · " + rec.key;
+  $("evidenceSource").textContent = rec.source || "";
+  $("evidenceRaw").textContent = rec.text || "";
+}
+
+/* ── the incident ────────────────────────────────────────────────────── */
+
+function showIncident(inc, counts) {
+  incident = inc;
+  const c = counts || {};
+  $("incidentBar").dataset.loaded = "true";
+  $("severity").textContent = esc(inc.severity || "P—");
+  $("incidentOverline").textContent = esc(inc.incident_id || "Incident");
+  $("incidentTitle").textContent = esc(inc.service || "unknown service");
+  $("incidentSummary").textContent = esc(inc.alert || "");
+  $("logCount").textContent = c.logs != null ? c.logs : "—";
+  $("metricCount").textContent = c.metrics != null ? c.metrics : "—";
+  $("runbookCount").textContent = c.runbooks != null ? c.runbooks : "—";
+  $("investigateButton").disabled = false;
+}
+
+function countKinds(inc) {
+  const c = { logs: 0, metrics: 0, runbooks: 0 };
+  (inc.evidence || []).forEach((r) => {
+    if (r.kind === "log") c.logs++;
+    else if (r.kind === "metric") c.metrics++;
+    else if (r.kind === "runbook") c.runbooks++;
+  });
+  return c;
+}
+
+/* ── the brief ───────────────────────────────────────────────────────── */
+
+function renderBrief(b) {
+  brief = b;
+  $("briefEmpty").hidden = true;
+  $("briefContent").hidden = false;
+
+  $("decisionValue").textContent = esc(b.decision).toUpperCase().replace(/_/g, " ");
+
+  const v = b.verdict || {};
+  $("confidenceValue").textContent = v.pass
+    ? "VERIFIED · " + (b.claims || []).length + " GROUNDED CLAIMS"
+    : "VERIFIER RAISED " + ((v.problems || []).length) + " PROBLEM(S)";
+
+  /* Root cause: the claims the investigators labelled `cause`, which is the
+     only kind that answers "why did this happen". */
+  const causes = (b.claims || []).filter((c) => c.kind === "cause");
+  $("rootCauseText").textContent = causes.length
+    ? causes.map((c) => c.text).join(" ")
+    : esc(b.summary);
+  fillCitations($("rootCitations"),
+    [...new Set(causes.flatMap((c) => c.cites || []))]);
+
+  /* Reason: why this decision rather than the other one. When a runbook
+     forced the escalation, quote it -- that sentence is the whole argument. */
+  const ruledOut = (b.claims || []).filter((c) => c.kind === "ruled_out");
+  const parts = [];
+  if (b.escalate_because) parts.push("The runbook states: “" + b.escalate_because + "”.");
+  if (b.summary) parts.push(b.summary);
+  (b.rejected || []).forEach((r) => parts.push(r.runbook + " was rejected: " + r.because));
+  $("reasonText").textContent = parts.join(" ") || "—";
+  fillCitations($("reasonText").parentElement.querySelector(".citations"),
+    [...new Set([...(b.plan || []).flatMap((r) => r.cites || []),
+                 ...ruledOut.flatMap((c) => c.cites || [])])].slice(0, 6));
+
+  /* The injection finding. */
+  const q = (b.quarantined || [])[0];
+  if (q) {
+    $("injectionLine").textContent = q.key.replace("log:", "");
+    $("injectionNote").textContent =
+      "Quarantined before any model call — " + q.why +
+      ". Rules tripped: " + (q.rules || []).join(", ") + ".";
+    const cit = $("injectionCitation");
+    cit.hidden = false;
+    cit.textContent = q.key;
+    cit.onclick = () => showEvidence(q.key);
+  } else {
+    $("injectionLine").textContent = "none";
+    $("injectionNote").textContent = "No instruction-shaped line was found in this incident.";
+  }
+
+  setState("briefState", "complete", "Verified");
+}
+
+/* ── the approval gate ───────────────────────────────────────────────── */
+
+const RISK_CLASS = { read_only: "safe", reversible: "safe", confirm: "destructive", human: "" };
+const RISK_LABEL = { read_only: "Read only", reversible: "Reversible", confirm: "Confirm gate", human: "Human" };
+
+function renderPlan(rows) {
+  planRows = rows || [];
+  gateInputs = {};
+  const list = $("actionList");
+  list.innerHTML = "";
+
+  const full = (brief && brief.plan) || [];
+  const all = full.length ? full : planRows;
+
+  $("safeCount") .textContent = all.filter((r) => r.risk === "read_only" || r.risk === "reversible").length;
+  $("gatedCount").textContent = all.filter((r) => r.risk === "confirm").length;
+  $("humanCount").textContent = all.filter((r) => r.risk === "human").length;
+
+  if (!all.length) {
+    list.innerHTML = '<div class="empty-state"><p class="empty-title">No actions were proposed</p>' +
+      '<p class="empty-copy">The resolver did not find an applicable runbook step.</p></div>';
+    return;
+  }
+
+  all.forEach((row) => {
+    const gated = planRows.some((r) => r.id === row.id);   // human rows are not offered
+    const div = document.createElement("div");
+    div.className = "action-row";
+
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.dataset.rowId = row.id;
+    cb.checked = gated && row.risk !== "confirm";
+    cb.disabled = !gated || row.risk === "confirm";
+    div.appendChild(cb);
+
+    const main = document.createElement("div");
+    main.className = "action-main";
+    const name = document.createElement("p");
+    name.className = "action-name";
+    name.textContent = row.action;
+    const id = document.createElement("span");
+    id.className = "action-id";
+    id.textContent = row.id + (row.rationale ? " · " + row.rationale : "");
+    main.appendChild(name);
+    main.appendChild(id);
+    div.appendChild(main);
+
+    const risk = document.createElement("span");
+    risk.className = "risk " + (RISK_CLASS[row.risk] || "");
+    risk.textContent = RISK_LABEL[row.risk] || row.risk;
+    div.appendChild(risk);
+
+    /* A destructive row cannot be ticked until the runbook id is typed
+       exactly. Typing unlocks the box; it never ticks it. Approving stays a
+       separate, deliberate click, and editing the phrase afterwards locks it
+       again and clears the tick. */
+    if (row.risk === "confirm" && gated) {
+      const phrase = (planRows.find((r) => r.id === row.id) || {}).confirm_phrase
+                     || row.id.split(":")[0];
+      const wrap = document.createElement("div");
+      wrap.className = "confirm-row";
+      const inp = document.createElement("input");
+      inp.className = "confirm-input";
+      inp.type = "text";
+      inp.placeholder = "type " + phrase + " to unlock";
+      const state = document.createElement("span");
+      state.className = "confirm-state";
+      state.textContent = "LOCKED";
+      inp.addEventListener("input", () => {
+        const ok = inp.value.trim() === phrase;
+        cb.disabled = !ok;
+        if (!ok) cb.checked = false;
+        state.textContent = ok ? "UNLOCKED" : "LOCKED";
+        state.style.color = ok ? "var(--green)" : "var(--red)";
+      });
+      wrap.appendChild(inp);
+      wrap.appendChild(state);
+      div.appendChild(wrap);
+      gateInputs[row.id] = inp;
+    }
+
+    list.appendChild(div);
+  });
+
+  setState("approvalState", "attention", "Awaiting approval");
+  $("approveButton").disabled = false;
+  $("rejectButton").disabled = false;
+  $("approvalNote").textContent =
+    "Nothing runs until you approve it. Destructive steps need their runbook id typed.";
+}
+
+function renderReceipt(m) {
+  const recorded = (m.receipts || []).map((r) => r.id);
+  const skipped = m.skipped || [];
+  const r = $("approvalReceipt");
+  r.hidden = false;
+  r.textContent = recorded.length
+    ? "Recorded " + recorded.length + " approved action(s): " + recorded.join(", ") +
+      (skipped.length ? " — not approved, not recorded: " + skipped.join(", ") : "") +
+      ". No command was executed by this system."
+    : "Nothing was approved. No action was recorded.";
+  setState("approvalState", "approved", "Approved");
+  $("approveButton").disabled = true;
+  $("rejectButton").disabled = true;
+  document.querySelectorAll("#actionList input[type=checkbox]").forEach((c) => (c.disabled = true));
+  Object.values(gateInputs).forEach((i) => (i.disabled = true));
+}
+
+/* ── frames ──────────────────────────────────────────────────────────── */
+
+function onFrame(m) {
+  switch (m.e) {
+    case "start":
+      threadId = m.thread_id;
+      setState("tokenMeter", "running");
+      setState("investigationState", "running", "Running");
+      startClock();
+      say(null, "Model: " + (m.model || "unknown"));
+      break;
+
+    case "incident":
+      showIncident(
+        { incident_id: m.incident_id, severity: m.severity, service: m.service, alert: m.alert },
+        m.counts
+      );
+      break;
+
+    case "node":
+      seenNodes.add(m.node);
+      progress();
+      break;
+
+    case "agent": {
+      const running = m.status === "running";
+      setLane(m.name, running ? "running" : "complete",
+              running ? "Running" : "Done", m.detail || (running ? "working…" : "complete"));
+      if (running) say(m.name, m.detail || "working…");
+      else if (m.detail) say(m.name, m.detail);
+      break;
+    }
+
+    case "act":
+      say(m.agent, m.tool + "(" + JSON.stringify(m.input) + ")");
+      break;
+
+    case "quarantine": {
+      const t = $("trustSummary");
+      t.dataset.threat = "true";
+      t.querySelector(".shield").textContent = "!";
+      $("trustTitle").textContent = "Prompt injection quarantined at " + m.key;
+      $("trustDetail").textContent =
+        m.why + " — redacted before any model call. Rules: " + (m.rules || []).join(", ") + ".";
+      const raw = $("trustRaw");
+      raw.hidden = false;
+      raw.textContent = m.raw;
+      setState("evidenceState", "attention", "1 quarantined");
+      break;
+    }
+
+    case "brief":
+      renderBrief(m.brief);
+      break;
+
+    case "await":
+      renderPlan(m.rows);
+      break;
+
+    case "tokens":
+      $("tokenCount").textContent = (m.in || 0) + (m.out || 0);
+      setState("tokenMeter", "complete");
+      break;
+
+    case "receipt":
+      renderReceipt(m);
+      break;
+
+    case "done":
+      stopClock();
+      setState("investigationState", "complete", m.awaiting ? "Awaiting approval" : "Complete");
+      if (!m.awaiting) progress();
+      $("investigateButton").disabled = false;
+      break;
+
+    case "error":
+      fail(m.message);
+      stopClock();
+      setState("investigationState", "attention", "Failed");
+      $("investigateButton").disabled = false;
+      break;
+  }
+}
+
+/* ── transport ───────────────────────────────────────────────────────── */
+
+async function readStream(res, onEach) {
+  if (!res.ok || !res.body) { fail(res.status + " " + res.statusText); return; }
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    const parts = buf.split("\n\n");
+    buf = parts.pop();                       /* the tail is a partial frame — keep it */
+    for (const p of parts) {
+      const line = p.split("\n").find((l) => l.startsWith("data:"));
+      if (!line) continue;
+      try { onEach(JSON.parse(line.slice(5).trim())); }
+      catch (e) { /* one unparseable frame must not end the stream */ }
+    }
+  }
+}
+
+function resetRun() {
+  $("errorBanner").hidden = true;
+  seenNodes = new Set(); progress();
+  brief = null; planRows = []; gateInputs = {};
+  $("briefEmpty").hidden = false;
+  $("briefContent").hidden = true;
+  $("approvalReceipt").hidden = true;
+  $("actionList").innerHTML =
+    '<div class="empty-state"><p class="empty-title">Awaiting a verified response plan</p>' +
+    '<p class="empty-copy">No action can become final before this approval gate.</p></div>';
+  ["safeCount", "gatedCount", "humanCount"].forEach((i) => ($(i).textContent = "—"));
+  Object.keys(LANE).forEach((k) => setLane(k, "idle", "Idle", "Queued"));
+  setState("briefState", "idle", "Awaiting investigation");
+  setState("approvalState", "idle", "Locked");
+  setState("evidenceState", "idle", "Unscanned");
+  $("approveButton").disabled = true;
+  $("rejectButton").disabled = true;
+}
+
+async function investigate() {
+  resetRun();
+  $("investigateButton").disabled = true;
+  if (demoMode) return replayDemo();
+  try {
+    const res = await fetch("/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(incident ? { incident } : {}),
+    });
+    await readStream(res, onFrame);
+  } catch (e) {
+    fail(String(e));
+    $("investigateButton").disabled = false;
+  }
+}
+
+async function submit(approvedIds) {
+  $("approveButton").disabled = true;
+  $("rejectButton").disabled = true;
+  if (!threadId) { renderReceipt({ receipts: [], skipped: approvedIds }); return; }
+  try {
+    const res = await fetch("/approve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ thread_id: threadId, approved_ids: approvedIds }),
+    });
+    await readStream(res, onFrame);
+  } catch (e) { fail(String(e)); }
+}
+
+/* ── wiring ──────────────────────────────────────────────────────────── */
+
+$("investigateButton").addEventListener("click", investigate);
+
+$("approveButton").addEventListener("click", () => {
+  const ids = [...document.querySelectorAll("#actionList input[type=checkbox]")]
+    .filter((c) => c.checked && !c.disabled)
+    .map((c) => c.dataset.rowId);
+  submit(ids);
+});
+
+$("rejectButton").addEventListener("click", () => submit([]));
+
+/* Uploading sends the file to /load, which runs the same normaliser the CLI
+   does. Doing it server-side means the browser never has to know the input's
+   shape, and an uploaded file gets exactly the same treatment as the one on
+   disk. */
+$("incidentFile").addEventListener("change", async (ev) => {
+  const file = ev.target.files && ev.target.files[0];
+  if (!file) return;
+  try {
+    const res = await fetch("/load", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: await file.text(),
+    });
+    if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
+    const inc = await res.json();
+    resetRun();
+    showIncident(inc, countKinds(inc));
+    say(null, file.name + " loaded. Press Investigate.");
+  } catch (e) {
+    fail("Could not load that file: " + e.message);
+  } finally {
+    ev.target.value = "";     /* so re-picking the same file fires change again */
+  }
+});
+
+/* ── demo: the whole screen with no backend and no tokens ────────────── */
+
+async function replayDemo() {
+  const frames = await fetch("demo/frames.json").then((r) => r.json()).catch(() => null);
+  if (!frames) { fail("demo/frames.json not found — run python tools/record_demo.py"); return; }
+  for (const f of frames) {
+    onFrame(f);
+    await new Promise((s) => setTimeout(s, f.e === "agent" ? 240 : 80));
+  }
+  $("investigateButton").disabled = false;
+}
+
+/* Load whatever is on disk so the screen is usable without an upload. */
+(async function boot() {
+  let inc = null;
+  try {
+    inc = await fetch("/incident").then((r) => (r.ok ? r.json() : null));
+  } catch (e) { /* no server at all */ }
+  if (inc) showIncident(inc, countKinds(inc));
+  else demoMode = true;   /* no backend: replay only, and upload has nowhere to go */
+  if (demoMode) {
+    $("incidentFile").closest("label").style.display = "none";
+    say(null, "Recorded demo: press Investigate to replay a real run. No live model is called.");
+  }
+  if (new URLSearchParams(location.search).has("demo")) investigate();
+})();
+
+</script>
+</body>
+</html>
