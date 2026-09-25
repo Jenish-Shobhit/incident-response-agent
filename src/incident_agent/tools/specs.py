@@ -11,7 +11,7 @@ capability was never granted.  An injected instruction that says *run scale-down
 reaches a model whose entire tool vocabulary is five read-only verbs, and the worst it
 can do is call one of them.
 
-``app/llm.py`` translates these into whatever shape the provider wants.
+``incident_agent.llm`` translates these into whatever shape the provider wants.
 """
 
 TOOLS = {

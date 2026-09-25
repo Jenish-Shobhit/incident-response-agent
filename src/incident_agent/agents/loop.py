@@ -22,10 +22,10 @@ it, and every one of those calls is billed.
 import json
 import re
 
-from app.llm import converse, text_block, tool_result_block
-from app.tools.grants import tools_for
-from app.tools.impl import run_tool
-from app.tools.specs import specs_for
+from incident_agent.llm import converse, text_block, tool_result_block
+from incident_agent.tools.grants import tools_for
+from incident_agent.tools.impl import run_tool
+from incident_agent.tools.specs import specs_for
 
 JSON_FENCE = re.compile(r"```(?:json)?\s*(.+?)\s*```", re.S)
 
@@ -59,7 +59,7 @@ def extract_json(text):
     return None
 
 
-def run_agent(agent, system, user_text, records, max_rounds=3, on_event=None, max_tokens=1500):
+def run_agent(agent, system, user_text, records, max_rounds=3, on_event=None, max_tokens=None):
     """Run one agent to completion and return what it produced.
 
     ``records`` is the **agent view** -- redacted.  It is passed straight through to the

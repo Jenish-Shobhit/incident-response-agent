@@ -1,27 +1,14 @@
 """Each test here defends one claim the project makes. None of them test plumbing."""
 
 import json
-import os
-import sys
 
 import pytest
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from app.evidence import REDACTED, classify, scan
-from app.metrics import compare_metric, parse_metric
-from app.tools.grants import FORBIDDEN_VERBS, GRANTED, GRANTS
-from app.tools.impl import run_tool
-from app.tools.specs import TOOLS
-
-INCIDENT = os.environ.get("INCIDENT", "data/incident.json")
-
-
-@pytest.fixture(scope="module")
-def records():
-    with open(INCIDENT) as f:
-        return json.load(f)["evidence"]
-
+from incident_agent import config
+from incident_agent.evidence import REDACTED, classify, compare_metric, scan
+from incident_agent.tools.grants import FORBIDDEN_VERBS, GRANTED, GRANTS
+from incident_agent.tools.impl import run_tool
+from incident_agent.tools.specs import TOOLS
 
 # ── the guard ────────────────────────────────────────────────────────────────
 
@@ -205,7 +192,7 @@ def test_every_overlay_action_is_the_runbooks_own_words(records):
     This is what stops a plausible-sounding action -- 'DROP INDEX', 'restart the database'
     -- from entering a plan that a human is about to approve.
     """
-    with open("data/runbooks.json") as f:
+    with open(config.OVERLAY_PATH) as f:
         overlay = {k: v for k, v in json.load(f).items() if not k.startswith("_")}
 
     bodies = {r["id"]: f"{r['title']} {r['body']}" for r in records if r["kind"] == "runbook"}

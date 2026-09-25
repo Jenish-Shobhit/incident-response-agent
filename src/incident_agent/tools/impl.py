@@ -12,12 +12,10 @@ tells it the truth -- there was a line here, it was quarantined, and you may not
 """
 
 import json
-import os
 import re
 
-from app.metrics import compare_metric
-
-OVERLAY_PATH = os.environ.get("RUNBOOK_OVERLAY", "data/runbooks.json")
+from incident_agent import config
+from incident_agent.evidence.metrics import compare_metric
 
 _overlay_cache = None
 
@@ -27,7 +25,7 @@ def overlay():
     global _overlay_cache
     if _overlay_cache is None:
         try:
-            with open(OVERLAY_PATH) as f:
+            with open(config.OVERLAY_PATH) as f:
                 _overlay_cache = {k: v for k, v in json.load(f).items() if not k.startswith("_")}
         except (OSError, ValueError):
             _overlay_cache = {}

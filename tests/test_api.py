@@ -2,8 +2,7 @@ import json
 
 from fastapi.testclient import TestClient
 
-from app.main import app
-
+from incident_agent.api import app
 
 client = TestClient(app)
 
@@ -19,8 +18,10 @@ def sse_frames(response):
 def test_health_reports_mock_mode():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["ok"] is True
-    assert response.json()["mock"] == "1"
+    body = response.json()
+    assert body["ok"] is True
+    assert body["mock"] is True
+    assert body["problems"] == []
 
 
 def test_index_serves_the_operator_console():
@@ -35,19 +36,12 @@ def test_incident_endpoint_serves_the_bundled_incident():
     assert response.json()["incident_id"] == "INC-3172"
 
 
-def test_load_accepts_the_public_example():
-    with open("examples/incident-input.json") as source:
-        response = client.post("/load", json=json.load(source))
-    assert response.status_code == 200
-    assert response.json()["evidence"]
-
-
-def test_the_bundled_incident_is_the_normalised_example():
-    """data/incident.json is generated from the example; they must not drift apart."""
-    with open("examples/incident-input.json") as source:
-        loaded = client.post("/load", json=json.load(source)).json()
-    with open("data/incident.json") as bundled:
-        assert loaded == json.load(bundled)
+def test_an_uploaded_file_gets_the_same_treatment_as_the_bundled_one(raw_incident):
+    """/load and /incident share one normaliser; the same file must come out identical."""
+    loaded = client.post("/load", json=raw_incident)
+    assert loaded.status_code == 200
+    assert loaded.json()["evidence"]
+    assert loaded.json() == client.get("/incident").json()
 
 
 def test_load_rejects_an_unexpected_shape():

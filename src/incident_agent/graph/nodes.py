@@ -1,6 +1,6 @@
 """All eleven nodes, in one module, on purpose.
 
-The obvious alternative -- ``app/nodes/ingest.py``, ``app/nodes/guard.py``, and so on --
+The obvious alternative -- ``graph/nodes/ingest.py``, ``graph/nodes/guard.py``, and so on --
 is what produces a ``graph.py`` with eleven ``add_node`` calls referring to eleven names
 nobody imported.  That is a ``NameError`` at import time, it is invisible until the graph
 is built, and it is the single most common way this kind of project fails to start.  One
@@ -21,19 +21,17 @@ the planner after every round.  That is what makes this an orchestration rather 
 one-shot fan-out with extra steps.
 """
 
-import json
-import os
-
 from langgraph.types import Send, interrupt
 
-from app.agent import run_agent
-from app.evidence import audit_view, index, scan
-from app.prompts import BY_AGENT
-from app.state import IncidentState, surviving
-from app.tools.impl import overlay
+from incident_agent import config
+from incident_agent.agents.loop import run_agent
+from incident_agent.agents.prompts import BY_AGENT
+from incident_agent.evidence.guard import audit_view, index, scan
+from incident_agent.graph.state import IncidentState, surviving
+from incident_agent.tools.impl import overlay
 
-MAX_ROUNDS = int(os.environ.get("MAX_ROUNDS", "3"))
-MAX_QUESTIONS = int(os.environ.get("MAX_QUESTIONS", "2"))
+MAX_ROUNDS = config.MAX_ROUNDS
+MAX_QUESTIONS = config.MAX_QUESTIONS
 
 RISK_ORDER = {"read_only": 0, "reversible": 1, "confirm": 2, "human": 3}
 VALID_RISK = set(RISK_ORDER)

@@ -9,26 +9,21 @@
 .venv/
 __pycache__/
 *.py[cod]
+*.egg-info/
 .pytest_cache/
 .ruff_cache/
 .coverage
 htmlcov/
 dist/
 build/
-*.egg-info/
 
 # Generated at runtime
-docs/model-selected.txt
-/demo/
+.cache/
+runs/
 
-# Editors and operating systems
+# Editors, operating systems, local agent tooling
 .DS_Store
 .idea/
 .vscode/
-
-# Local tooling
 .claude/
 .codex/
-
-# Personal working material, never published
-personal/

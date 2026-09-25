@@ -16,12 +16,11 @@ normal run. Leaving it at the default means the graph works in testing and throw
 the run stops, and there is nothing to resume into.
 """
 
-import os
-
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 
-from app.nodes import (
+from incident_agent import config
+from incident_agent.graph.nodes import (
     approve,
     collect,
     dispatch,
@@ -36,9 +35,9 @@ from app.nodes import (
     triage,
     verify,
 )
-from app.state import IncidentState
+from incident_agent.graph.state import IncidentState
 
-RECURSION_LIMIT = int(os.environ.get("RECURSION_LIMIT", "40"))
+RECURSION_LIMIT = config.RECURSION_LIMIT
 
 
 def build():
@@ -91,7 +90,6 @@ def run_config(thread_id):
     return {"configurable": {"thread_id": thread_id}, "recursion_limit": RECURSION_LIMIT}
 
 
-g = build()
 app_graph = compile_graph()
 
 

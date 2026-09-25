@@ -1,7 +1,51 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "incident-response-agent"
+version = "1.0.0"
+description = "Multi-agent incident response on LangGraph: parallel investigators, cited evidence, prompt-injection quarantine, and a human approval gate."
+readme = "README.md"
+license = "MIT"
+authors = [{ name = "Jenish Shobhit" }]
+requires-python = ">=3.11"
+dependencies = [
+    "anthropic==0.120.0",
+    "boto3==1.43.57",
+    "fastapi==0.140.7",
+    "langgraph==1.2.9",
+    "python-dotenv>=1.0",
+    "uvicorn[standard]==0.51.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "httpx==0.28.1",
+    "pytest==9.1.1",
+    "ruff>=0.8",
+]
+
+[project.urls]
+Repository = "https://github.com/Jenish-Shobhit/incident-response-agent"
+Demo = "https://dpdduyx82d5bu.cloudfront.net"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
 [tool.pytest.ini_options]
 addopts = "-ra --strict-markers"
 testpaths = ["tests"]
+pythonpath = ["src"]
 
-[tool.coverage.run]
-branch = true
-source = ["app"]
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+src = ["src", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["E501"]  # long lines are allowed where a prompt or docstring reads better unwrapped
+
+[tool.ruff.lint.isort]
+known-first-party = ["incident_agent"]

@@ -2036,7 +2036,7 @@ $("incidentFile").addEventListener("change", async (ev) => {
 
 async function replayDemo() {
   const frames = await fetch("demo/frames.json").then((r) => r.json()).catch(() => null);
-  if (!frames) { fail("demo/frames.json not found — run python tools/record_demo.py"); return; }
+  if (!frames) { fail("demo/frames.json not found — run python scripts/record_demo.py"); return; }
   for (const f of frames) {
     onFrame(f);
     await new Promise((s) => setTimeout(s, f.e === "agent" ? 240 : 80));

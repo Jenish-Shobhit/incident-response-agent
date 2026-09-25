@@ -1,20 +1,12 @@
 """The graph's behaviour, entirely in mock mode. No tokens, no network, no flakiness."""
 
-import json
-import os
-import sys
-
 import pytest
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-os.environ["MOCK"] = "1"
-
 from langgraph.types import Command
 
-from app.graph import RECURSION_LIMIT, compile_graph, run_config
-from app.llm import reset_mock
-from app.nodes import MAX_ROUNDS, route_verdict
-from app.state import surviving
+from incident_agent.graph import RECURSION_LIMIT, compile_graph, run_config
+from incident_agent.graph.nodes import MAX_ROUNDS, route_verdict
+from incident_agent.graph.state import surviving
+from incident_agent.llm import reset_mock
 
 # What a correct run on the bundled incident concludes. The migration's lock is the cause,
 # and RB-01 itself says rebuilding the index needs a person, so the run must escalate.
@@ -25,12 +17,6 @@ EXPECTED_DECISION = "escalate"
 def graph():
     reset_mock()
     return compile_graph()
-
-
-@pytest.fixture(scope="module")
-def incident():
-    with open("data/incident.json") as f:
-        return json.load(f)
 
 
 def run_to_gate(graph, incident, thread="t"):

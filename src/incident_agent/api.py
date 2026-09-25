@@ -12,24 +12,29 @@ first frame, and handed back with the approval so LangGraph can find the checkpo
 """
 
 import json
-import os
 import uuid
-from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from langgraph.types import Command
 
-from app.evidence import normalise
-from app.graph import app_graph, run_config
-from app.llm import describe, reset_mock
+from incident_agent import __version__, config
+from incident_agent.evidence.records import normalise
+from incident_agent.graph import app_graph, run_config
+from incident_agent.llm import describe, reset_mock
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-WEB = Path(os.environ.get("WEB_DIR", PROJECT_ROOT / "web"))
-INCIDENT = Path(os.environ.get("INCIDENT", PROJECT_ROOT / "data" / "incident.json"))
+WEB = config.WEB_DIR
 
-app = FastAPI(title="Agentic Incident Response")
+app = FastAPI(title="Incident Response Agent", version=__version__)
+
+
+def bundled_incident():
+    """The scenario's incident, normalised. Read per request so edits show up on reload."""
+    if not config.INCIDENT_PATH.exists():
+        raise HTTPException(500, f"{config.INCIDENT_PATH} is missing -- check SCENARIO_DIR")
+    with open(config.INCIDENT_PATH) as f:
+        return normalise(json.load(f))
 
 # `?demo` fetches web/demo/frames.json, and it is the one path that has to work when
 # nothing else does -- no model, no credentials, no network. Without this mount the
@@ -57,14 +62,20 @@ def index():
 
 @app.get("/health")
 def health():
-    return {"ok": True, "model": describe(), "mock": os.environ.get("MOCK", "1")}
+    problems = config.problems()
+    return {
+        "ok": not problems,
+        "version": __version__,
+        "mock": config.MOCK,
+        "model": describe() if not problems else None,
+        "problems": problems,
+    }
 
 
 @app.get("/incident")
 def incident():
     """The raw incident, for the audit view. This is the only place raw log text is served."""
-    with open(INCIDENT) as f:
-        return json.load(f)
+    return bundled_incident()
 
 
 @app.post("/load")
@@ -77,13 +88,13 @@ async def load(request: Request):
     try:
         source = await request.json()
     except Exception:
-        raise HTTPException(400, "that file is not valid JSON")
+        raise HTTPException(400, "that file is not valid JSON") from None
     if not isinstance(source, dict) or "logs" not in source:
         raise HTTPException(400, "expected an incident with a logs array")
     try:
         incident = normalise(source)
     except (KeyError, TypeError) as exc:
-        raise HTTPException(400, f"unexpected shape: {exc}")
+        raise HTTPException(400, f"unexpected shape: {exc}") from exc
     if not incident["evidence"]:
         raise HTTPException(400, "that file contains no evidence records")
     return incident
@@ -98,13 +109,11 @@ async def run(request: Request):
     except Exception:
         pass
 
-    if body.get("incident"):
-        inc = body["incident"]
-    else:
-        if not INCIDENT.exists():
-            raise HTTPException(400, f"{INCIDENT} missing -- run python tools/normalise.py first")
-        with open(INCIDENT) as f:
-            inc = json.load(f)
+    problems = config.problems()
+    if problems:
+        raise HTTPException(503, "; ".join(problems))
+
+    inc = body.get("incident") or bundled_incident()
 
     thread_id = str(uuid.uuid4())
     cfg = run_config(thread_id)
