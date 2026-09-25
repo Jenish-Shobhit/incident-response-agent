@@ -4,15 +4,19 @@ The application separates orchestration, evidence access, model transport, and o
 
 ## Runtime components
 
+All paths are under `src/incident_agent/` unless noted.
+
 | Component | Files | Responsibility |
 |---|---|---|
-| HTTP layer | `app/main.py` | Serves the console and exposes load, run, approval, incident, and health endpoints |
-| State graph | `app/graph.py`, `app/state.py` | Connects eleven nodes, reducers, interrupts, routing, and recursion limits |
-| Agent runtime | `app/agent.py`, `app/nodes.py` | Runs provider-neutral tool loops and emits observable progress events |
-| Evidence boundary | `app/evidence.py`, `app/metrics.py` | Normalizes evidence, quarantines injected text, and compares typed metrics |
-| Tool boundary | `app/tools/` | Defines schemas, grants per role, validates calls, and exposes read-only operations |
-| Model boundary | `app/llm.py` | Adapts mock fixtures, Bedrock Converse, and Anthropic Messages to one shape |
-| Operator console | `web/index.html` | Streams the investigation, displays citations, and submits approvals |
+| HTTP layer | `api.py` | Serves the console and exposes load, run, approval, incident, and health endpoints |
+| Configuration | `config.py` | Reads `.env` and the environment once; reports what a live run is missing |
+| State graph | `graph/builder.py`, `graph/state.py`, `graph/nodes.py` | Eleven nodes, reducers, interrupts, routing, and recursion limits |
+| Agent runtime | `agents/loop.py`, `agents/prompts.py` | The provider-neutral tool loop every agent runs, and the five system prompts |
+| Evidence boundary | `evidence/records.py`, `evidence/guard.py`, `evidence/metrics.py` | Normalizes an incident, quarantines injected text, and compares metrics with units |
+| Tool boundary | `tools/` | Declares five read-only tools, grants them per role, and runs them on redacted evidence only |
+| Model boundary | `llm/` | One `converse()` over mock fixtures, the Claude API, and Bedrock Converse |
+| Scenario | `scenarios/<name>/` | The incident, its runbook risk overlay, and the mock replies for each agent |
+| Operator console | `web/index.html` | Streams the investigation, shows citations, and submits approvals; replays `web/demo/` with no backend |
 
 ## Trust boundaries
 
@@ -34,4 +38,12 @@ LangGraph's interrupt ends the first response stream at the approval gate. The b
 
 The current graph uses `InMemorySaver`. That is appropriate for a single-process demonstration and keeps setup credential-free, but pending approvals do not survive restarts and cannot move between replicas. Production hardening should replace it with a durable checkpointer before scaling beyond one process.
 
-For a stage-by-stage walkthrough of how state flows through the graph and which LangGraph concepts each stage uses, open [`docs/learn.html`](learn.html) in a browser.
+## Adding a scenario
+
+A scenario is a folder under `scenarios/` with three things:
+
+- `incident.json` -- the alert, `logs`, `metrics` and `runbooks` in the input format of the bundled example.
+- `runbook_overlay.json` -- per-runbook risk, the individual actions (each a verbatim substring of the runbook body), `not_when` exclusions and human follow-ups. A test rejects any action the runbook does not contain.
+- `fixtures/<agent>.json` -- the recorded replies mock mode plays for `planner`, `log`, `metric`, `resolver` and `verifier`. Only needed for mock mode; live runs ignore them.
+
+Point `SCENARIO_DIR` at the folder to run it, and `make demo` to re-record the static replay.

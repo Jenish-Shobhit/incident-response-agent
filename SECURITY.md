@@ -12,4 +12,4 @@ Include the affected endpoint or component, reproduction conditions, impact, and
 
 ## Deployment boundary
 
-The repository's public deployment profile uses deterministic mock mode. Live model mode is not intended for unauthenticated internet exposure. Add identity, authorization, rate limits, durable state, and a least-privilege cloud role before using it with real incidents.
+The public deployment is a static replay with no backend. The application itself defaults to deterministic mock mode. Live model mode is not intended for unauthenticated internet exposure. Add identity, authorization, rate limits, durable state, and a least-privilege cloud role before using it with real incidents.

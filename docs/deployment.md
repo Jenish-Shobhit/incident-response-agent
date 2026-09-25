@@ -5,9 +5,9 @@ The public demo runs as a static replay on AWS S3 and CloudFront (section 4). Th
 ## 1. Verify locally
 
 ```bash
-make install
+make setup
 make check
-./run.sh
+make run
 ```
 
 Confirm these endpoints:
@@ -17,7 +17,7 @@ curl --fail http://127.0.0.1:8000/health
 curl --fail http://127.0.0.1:8000/incident
 ```
 
-The health response should report `ok: true` and `mock: "1"`.
+The health response should report `"ok": true`, `"mock": true` and an empty `problems` list.
 
 ## 2. Verify the production image
 
@@ -28,7 +28,7 @@ docker run --rm -p 8000:8000 incident-response-agent
 
 Open `http://127.0.0.1:8000`, complete an investigation, approve or reject the proposed actions, and verify a receipt is shown.
 
-The image runs as an unprivileged user, includes only runtime files, binds to `0.0.0.0`, and reads the platform-provided `PORT` variable.
+The image runs as an unprivileged user, includes only the package, the scenario and the console, binds to `0.0.0.0`, reads the platform-provided `PORT` variable, and declares a `/health` container health check. CI builds it and smoke-tests `/health` on every push.
 
 ## 3. Deploy mock mode to Render
 
@@ -76,7 +76,7 @@ This is the public demo. Only `web/index.html` and `web/demo/frames.json` are pu
 
 ### Every push to `main`
 
-CI runs the tests and container build, then the `deploy-demo` job assumes the role over OIDC, runs `aws s3 sync web/ --delete`, and invalidates `/*` on CloudFront. The job is skipped when `AWS_DEPLOY_ROLE_ARN` is unset.
+CI runs lint, the tests, a check that the recorded demo still matches the code, and the container build; then the `deploy-demo` job assumes the role over OIDC, runs `aws s3 sync web/ --delete`, and invalidates `/*` on CloudFront. The job is skipped when `AWS_DEPLOY_ROLE_ARN` is unset.
 
 ### Verify
 
@@ -94,7 +94,7 @@ Disable the distribution, wait for it to deploy, then delete it. Empty and delet
 
 Do not put long-lived AWS access keys in Render for a public demo. Deploy live mode to AWS App Runner, ECS/Fargate, or another AWS runtime that can attach a least-privilege IAM role.
 
-The runtime configuration is:
+The runtime configuration is (see [configuration](configuration.md) for every variable):
 
 ```text
 MOCK=0
@@ -102,6 +102,8 @@ LLM_PROVIDER=bedrock
 AWS_REGION=<region>
 BEDROCK_MODEL=<permitted model or inference profile>
 ```
+
+For the Claude API instead, set `LLM_PROVIDER=anthropic` and provide `ANTHROPIC_API_KEY` through the platform's secret store, never in the image.
 
 Grant only `bedrock:InvokeModel` for the selected model or inference-profile ARN. Keep the service private until authentication and rate limits are in place.
 
