@@ -1975,7 +1975,15 @@ async function investigate() {
 async function submit(approvedIds) {
   $("approveButton").disabled = true;
   $("rejectButton").disabled = true;
-  if (!threadId) { renderReceipt({ receipts: [], skipped: approvedIds }); return; }
+  /* A replay has no server to resume. Record the decision in the page, the same
+     way the execute node would: approved rows get a receipt, the rest are listed. */
+  if (demoMode || !threadId) {
+    renderReceipt({
+      receipts: approvedIds.map((id) => ({ id })),
+      skipped: planRows.map((r) => r.id).filter((id) => !approvedIds.includes(id)),
+    });
+    return;
+  }
   try {
     const res = await fetch("/approve", {
       method: "POST",
@@ -2046,6 +2054,11 @@ async function replayDemo() {
   else demoMode = true;   /* no backend: replay only, and upload has nowhere to go */
   if (demoMode) {
     $("incidentFile").closest("label").style.display = "none";
+    /* No backend to ask, so take the incident header from the recording itself.
+       Without this the Investigate button never enables on a static host. */
+    const frames = await fetch("demo/frames.json").then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    const head = frames && frames.find((f) => f.e === "incident");
+    if (head && !inc) showIncident(head, head.counts);
     say(null, "Recorded demo: press Investigate to replay a real run. No live model is called.");
   }
   if (new URLSearchParams(location.search).has("demo")) investigate();
